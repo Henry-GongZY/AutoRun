@@ -1,49 +1,56 @@
-import sys
 import logging
 from src.config import settings
 from src.clients.feishu_client import FeishuClient
-from src.clients.gitlab_client import GitLabClient
-from src.validators.example import ProjectNameValidator
+from src.core.task import BatchConfig
+from src.core.runner import TaskRunner
 
 # 配置日志
 logging.basicConfig(level=settings.log_level, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-from src.core.task import BatchTask
-from src.core.runner import TaskRunner
-
 def main():
-    logger.info("Initializing AutoRun project...")
+    logger.info("AutoRun service starting...")
 
-    # 1. 客户端初始化示例
+    # 1. 加载任务配置
+    try:
+        config = BatchConfig.from_file("tasks.json")
+        logger.info(f"Loaded {len(config.tasks)} tasks from tasks.json")
+    except Exception as e:
+        logger.error(f"Failed to load tasks.json: {e}")
+        return
+
+    # 2. 初始化飞书客户端
     feishu = FeishuClient(settings.feishu_app_id, settings.feishu_app_secret)
-    gitlab = GitLabClient(settings.gitlab_url, settings.gitlab_private_token)
 
-    # 2. 校验规则示例
-    validator = ProjectNameValidator()
-    test_name = "AUTO-MIGRATE"
-    if validator.validate(test_name):
-        logger.info(f"Validation passed for: {test_name}")
+    # 3. 定义当在飞书消息中检测到路径时的处理逻辑
+    def on_feishu_path_received(path, data):
+        # 获取发送消息的 chat_id 以便回复
+        chat_id = data.event.message.chat_id
+        
+        # 寻找匹配的任务
+        matching_task = next((t for t in config.tasks if t.local_dir == path), None)
+        
+        if matching_task:
+            feishu.send_text_message("chat_id", chat_id, f"🔍 检测到匹配任务: {matching_task.name}，正在启动...")
+            
+            # 执行任务
+            runner = TaskRunner(tasks=[matching_task])
+            try:
+                runner.run_all()
+                feishu.send_text_message("chat_id", chat_id, f"✅ 任务执行成功: {matching_task.name}")
+            except Exception as e:
+                feishu.send_text_message("chat_id", chat_id, f"❌ 任务执行失败: {str(e)}")
+        else:
+            logger.warning(f"No task found for path: {path}")
+            feishu.send_text_message("chat_id", chat_id, f"⚠️ 未找到与目录 '{path}' 关联的任务，请检查 tasks.json 配置。")
 
-    # 3. 自动化批处理示例
-    logger.info("--- Batch Processing Demo ---")
-    
-    # 定义一个任务（例如：拉取一个公开库并查看其内容）
-    demo_task = BatchTask(
-        name="Update Docs",
-        git_url="https://github.com/larksuite/oapi-sdk-python.git", # 仅作示例
-        local_dir="./temp_oapi_sdk",
-        commands=[
-            "ls -l",
-            "echo 'Successfully synced and listed files'"
-        ],
-        branch="v2"
-    )
-
-    runner = TaskRunner(tasks=[demo_task])
-    # 注意：在没有配置 Git 或网络环境的情况下，这里可能会失败
-    # runner.run_all()
-    logger.info("Task runner initialized. Uncomment 'runner.run_all()' in main.py to execute.")
+    # 4. 启动长连接监听器（这将阻塞当前线程）
+    try:
+        feishu.start_event_listener(on_feishu_path_received)
+    except KeyboardInterrupt:
+        logger.info("Service stopped by user.")
+    except Exception as e:
+        logger.error(f"Listener error: {e}")
 
 if __name__ == "__main__":
     main()
