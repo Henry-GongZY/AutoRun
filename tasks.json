@@ -1,0 +1,23 @@
+{
+  "tasks": [
+    {
+      "name": "Update Documentation",
+      "git_url": "https://github.com/larksuite/oapi-sdk-python.git",
+      "local_dir": "./repos/feishu_sdk",
+      "commands": [
+        "ls -l",
+        "echo 'Git sync and command execution successful'"
+      ],
+      "branch": "v2"
+    },
+    {
+      "name": "Local Clean Up",
+      "local_dir": "./temp_dir",
+      "commands": [
+        "mkdir -p temp_dir",
+        "rm -rf temp_dir/*",
+        "echo 'Clean up done'"
+      ]
+    }
+  ]
+}
