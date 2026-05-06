@@ -8,10 +8,6 @@ class Settings(BaseSettings):
     feishu_verification_token: Optional[str] = None
     feishu_event_encrypt_key: Optional[str] = None
 
-    # GitLab
-    gitlab_url: str = "https://gitlab.com"
-    gitlab_private_token: str
-
     # General
     log_level: str = "INFO"
 

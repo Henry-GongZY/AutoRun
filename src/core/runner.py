@@ -1,13 +1,16 @@
-import subprocess
-import os
 import logging
-from typing import List
+import os
+import subprocess
+from typing import List, Set
 from .task import BatchTask
 from ..utils.git_helper import GitHelper
 
 logger = logging.getLogger(__name__)
 
 class TaskRunner:
+    # 记录正在同步的任务路径，防止并发冲突
+    syncing_paths: Set[str] = set()
+
     def __init__(self, tasks: List[BatchTask]):
         self.tasks = tasks
 
@@ -16,8 +19,16 @@ class TaskRunner:
         for task in self.tasks:
             self.run_task(task)
 
+    def is_syncing(self, path: str) -> bool:
+        """检查某个路径是否正在同步"""
+        return path in self.syncing_paths
+
     def run_task(self, task: BatchTask):
         """执行单个任务"""
+        if self.is_syncing(task.local_dir):
+            logger.warning(f"Task {task.name} is currently syncing. Execution skipped.")
+            raise RuntimeError(f"项目 {task.name} 正在同步中，请稍后再试。")
+
         logger.info(f"--- Starting Task: {task.name} ---")
         
         # 1. 处理 Git 同步
