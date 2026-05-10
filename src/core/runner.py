@@ -4,6 +4,7 @@ import subprocess
 from typing import List, Set
 from .task import BatchTask
 from ..utils.git_helper import GitHelper
+from ..validators import run_all_validators
 
 logger = logging.getLogger(__name__)
 
@@ -54,3 +55,6 @@ class TaskRunner:
                 break  # 如果其中一个命令失败，跳过该任务后续命令
         
         logger.info(f"--- Task {task.name} Finished ---")
+
+        # 4. 按顺序调用校验器，如果失败则抛出异常
+        run_all_validators(task.name)

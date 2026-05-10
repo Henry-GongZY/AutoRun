@@ -1,7 +1,7 @@
 from .base import BaseValidator
 from typing import Any
 
-class ProjectNameValidator(BaseValidator):
+class HDRValidator(BaseValidator):
     """
     示例校验：检查项目名称是否符合规范
     """
