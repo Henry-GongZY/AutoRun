@@ -25,15 +25,15 @@ def get_sleep_interval():
         # 其余时间：不同步（这里设置为每小时检查一次，直到进入活跃时段）
         return 3600
 
-def git_monitor_loop(config: BatchConfig):
-    """后台轮询线程：动态频率监控 Git 更新"""
+def git_monitor_loop(tasks: List[BatchTask]):
+    """后台轮询线程：动态频率监控 Git 更新处理"""
     logger.info("Dynamic Git monitor started.")
     while True:
         interval = get_sleep_interval()
         
         # 只有在非休眠时段（间隔小于3600秒）才执行同步逻辑
         if interval < 3600:
-            for task in config.tasks:
+            for task in tasks:
                 if not task.git_url:
                     continue
                 
@@ -56,15 +56,20 @@ def git_monitor_loop(config: BatchConfig):
 def main():
     logger.info("AutoRun service starting...")
 
-    # 1. 加载任务配置
+    # 1. 加载任务配置 (从 src/tasks.py 导入)
     try:
-        config = BatchConfig.from_file("tasks.json")
+        from src.tasks import TASKS
+        tasks = TASKS
+        logger.info(f"Loaded {len(tasks)} tasks from tasks.py")
+    except ImportError:
+        logger.error("Failed to find tasks.py in the root directory.")
+        return
     except Exception as e:
-        logger.error(f"Failed to load tasks.json: {e}")
+        logger.error(f"Error loading tasks.py: {e}")
         return
 
     # 2. 启动后台 Git 监控线程
-    monitor_thread = threading.Thread(target=git_monitor_loop, args=(config,), daemon=True)
+    monitor_thread = threading.Thread(target=git_monitor_loop, args=(tasks,), daemon=True)
     monitor_thread.start()
 
     # 3. 初始化飞书客户端
@@ -73,7 +78,7 @@ def main():
     # 4. 定义飞书消息处理逻辑
     def on_feishu_path_received(path, data):
         chat_id = data.event.message.chat_id
-        matching_task = next((t for t in config.tasks if t.local_dir == path), None)
+        matching_task = next((t for t in tasks if t.local_dir == path), None)
         
         if not matching_task:
             feishu.send_text_message("chat_id", chat_id, f"⚠️ 未找到与目录 '{path}' 关联的任务。")
